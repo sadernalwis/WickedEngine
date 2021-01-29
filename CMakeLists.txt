@@ -14,5 +14,5 @@ elseif(UNIX)
 endif()
 
 add_subdirectory(WickedEngine)
-add_subdirectory(Tests)
+# add_subdirectory(Tests)
 add_subdirectory(Editor)

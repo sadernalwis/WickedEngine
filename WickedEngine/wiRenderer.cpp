@@ -54,6 +54,7 @@ GPUBuffer			resourceBuffers[RBTYPE_COUNT];
 Sampler				samplers[SSLOT_COUNT];
 
 string SHADERPATH = wiHelper::GetOriginalWorkingDirectory() + "../WickedEngine/shaders/";
+// string SHADERPATH = "~/RubyOS/WickedEngine/WickedEngine/shaders/";
 
 LinearAllocator renderFrameAllocators[COMMANDLIST_COUNT]; // can be used by graphics threads
 inline LinearAllocator& GetRenderFrameAllocator(CommandList cmd)
@@ -887,24 +888,15 @@ enum DEBUGRENDERING
 PipelineState PSO_debug[DEBUGRENDERING_COUNT];
 
 
-bool LoadShader(SHADERSTAGE stage, Shader& shader, const std::string& filename)
-{
+bool LoadShader(SHADERSTAGE stage, Shader& shader, const std::string& filename){
 	vector<uint8_t> buffer;
-	if (wiHelper::FileRead(SHADERPATH + filename, buffer)) 
-	{
-		return device->CreateShader(stage, buffer.data(), buffer.size(), &shader);
-	}
-	return false;
-}
-
-
-void LoadShaders()
-{
+	if (wiHelper::FileRead(SHADERPATH + filename, buffer)){
+		return device->CreateShader(stage, buffer.data(), buffer.size(), &shader);}
+	return false;}
+void LoadShaders(){
 	wiJobSystem::context ctx;
-
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) {
-		inputLayouts[ILTYPE_OBJECT_DEBUG].elements =
-		{
+		inputLayouts[ILTYPE_OBJECT_DEBUG].elements = {
 			{ "POSITION_NORMAL_WIND",	0, MeshComponent::Vertex_POS::FORMAT, INPUT_SLOT_POSITION_NORMAL_WIND, InputLayout::APPEND_ALIGNED_ELEMENT, INPUT_PER_VERTEX_DATA, 0 },
 		};
 		LoadShader(VS, shaders[VSTYPE_OBJECT_DEBUG], "objectVS_debug.cso");

@@ -761,15 +761,19 @@ void EditorComponent::Load()
 	scriptButton.SetColor(wiColor(255, 33, 140, 180), wiWidget::WIDGETSTATE::IDLE);
 	scriptButton.SetColor(wiColor(255, 100, 140, 255), wiWidget::WIDGETSTATE::FOCUS);
 	scriptButton.OnClick([&](wiEventArgs args) {
-		wiHelper::FileDialogParams params;
-		params.type = wiHelper::FileDialogParams::OPEN;
-		params.description = "Lua script";
-		params.extensions.push_back("lua");
-		wiHelper::FileDialog(params, [](std::string fileName) {
-			wiEvent::Subscribe_Once(SYSTEM_EVENT_THREAD_SAFE_POINT, [=](uint64_t userdata) {
-				wiLua::RunFile(fileName);
+		// wiHelper::FileDialogParams params;
+		// params.type = wiHelper::FileDialogParams::OPEN;
+		// params.description = "Lua script";
+		// params.extensions.push_back("lua");
+		// wiHelper::FileDialog(params, [](std::string fileName) {
+		// 	wiEvent::Subscribe_Once(SYSTEM_EVENT_THREAD_SAFE_POINT, [=](uint64_t userdata) {
+		// 		wiLua::RunFile(fileName);
+		// 	});
+		// });
+		wiEvent::Subscribe_Once(SYSTEM_EVENT_THREAD_SAFE_POINT, [=](uint64_t userdata) {
+				wiLua::RunFile(std::string("/home/crimson/RubyOS/WickedEngine/scripts/fighting_game.lua"));
 			});
-		});
+		// wiLua::RunFile());
 	});
 	GetGUI().AddWidget(&scriptButton);
 

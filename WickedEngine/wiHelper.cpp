@@ -450,7 +450,8 @@ namespace wiHelper
 		}
 #endif // PLATFORM_UWP
 
-		wiBackLog::post(("File not found: " + fileName).c_str());
+
+		wiBackLog::post(("File not found--: " + fileName).c_str());
 		return false;
 	}
 
