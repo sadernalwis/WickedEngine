@@ -3105,15 +3105,6 @@ void UpdateVisibility(Visibility& vis)
 		vis.visibleLights.resize(vis.scene->aabb_lights.GetCount());
 		wiJobSystem::Dispatch(ctx_lights, (uint32_t)vis.scene->aabb_lights.GetCount(), groupSize, [&](wiJobArgs args) {
 
-			Entity entity = vis.scene->aabb_lights.GetEntity(args.jobIndex);
-			const LayerComponent* layer = vis.scene->layers.GetComponent(entity);
-			if (layer != nullptr && !(layer->GetLayerMask() & vis.layerMask))
-			{
-				return;
-			}
-
-			const AABB& aabb = vis.scene->aabb_lights[args.jobIndex];
-
 			// Setup stream compaction:
 			uint32_t& group_count = *(uint32_t*)args.sharedmemory;
 			Visibility::VisibleLight* group_list = (Visibility::VisibleLight*)args.sharedmemory + 1;
@@ -3122,23 +3113,30 @@ void UpdateVisibility(Visibility& vis)
 				group_count = 0; // first thread initializes local counter
 			}
 
-			if (vis.frustum.CheckBoxFast(aabb))
+			Entity entity = vis.scene->aabb_lights.GetEntity(args.jobIndex);
+			const LayerComponent* layer = vis.scene->layers.GetComponent(entity);
+			if (layer == nullptr || (layer->GetLayerMask() & vis.layerMask))
 			{
-				// Local stream compaction:
-				//	(also compute light distance for shadow priority sorting)
-				assert(args.jobIndex < 0xFFFF);
-				group_list[group_count].index = (uint16_t)args.jobIndex;
-				const LightComponent& lightcomponent = vis.scene->lights[args.jobIndex];
-				float distance = 0;
-				if (lightcomponent.type != LightComponent::DIRECTIONAL)
+				const AABB& aabb = vis.scene->aabb_lights[args.jobIndex];
+
+				if (vis.frustum.CheckBoxFast(aabb))
 				{
-					distance = wiMath::DistanceEstimated(lightcomponent.position, vis.camera->Eye);
-				}
-				group_list[group_count].distance = uint16_t(distance * 10);
-				group_count++;
-				if (lightcomponent.IsVolumetricsEnabled())
-				{
-					vis.volumetriclight_request.store(true);
+					// Local stream compaction:
+					//	(also compute light distance for shadow priority sorting)
+					assert(args.jobIndex < 0xFFFF);
+					group_list[group_count].index = (uint16_t)args.jobIndex;
+					const LightComponent& lightcomponent = vis.scene->lights[args.jobIndex];
+					float distance = 0;
+					if (lightcomponent.type != LightComponent::DIRECTIONAL)
+					{
+						distance = wiMath::DistanceEstimated(lightcomponent.position, vis.camera->Eye);
+					}
+					group_list[group_count].distance = uint16_t(distance * 10);
+					group_count++;
+					if (lightcomponent.IsVolumetricsEnabled())
+					{
+						vis.volumetriclight_request.store(true);
+					}
 				}
 			}
 
@@ -3161,15 +3159,6 @@ void UpdateVisibility(Visibility& vis)
 		vis.visibleObjects.resize(vis.scene->aabb_objects.GetCount());
 		wiJobSystem::Dispatch(ctx, (uint32_t)vis.scene->aabb_objects.GetCount(), groupSize, [&](wiJobArgs args) {
 
-			Entity entity = vis.scene->aabb_objects.GetEntity(args.jobIndex);
-			const LayerComponent* layer = vis.scene->layers.GetComponent(entity);
-			if (layer != nullptr && !(layer->GetLayerMask() & vis.layerMask))
-			{
-				return;
-			}
-
-			const AABB& aabb = vis.scene->aabb_objects[args.jobIndex];
-
 			// Setup stream compaction:
 			uint32_t& group_count = *(uint32_t*)args.sharedmemory;
 			uint32_t* group_list = (uint32_t*)args.sharedmemory + 1;
@@ -3178,31 +3167,38 @@ void UpdateVisibility(Visibility& vis)
 				group_count = 0; // first thread initializes local counter
 			}
 
-			if (vis.frustum.CheckBoxFast(aabb))
+			Entity entity = vis.scene->aabb_objects.GetEntity(args.jobIndex);
+			const LayerComponent* layer = vis.scene->layers.GetComponent(entity);
+			if (layer == nullptr || (layer->GetLayerMask() & vis.layerMask))
 			{
-				// Local stream compaction:
-				group_list[group_count++] = args.jobIndex;
+				const AABB& aabb = vis.scene->aabb_objects[args.jobIndex];
 
-				if (vis.flags & Visibility::ALLOW_REQUEST_REFLECTION)
+				if (vis.frustum.CheckBoxFast(aabb))
 				{
-					const ObjectComponent& object = vis.scene->objects[args.jobIndex];
-					if (object.IsRequestPlanarReflection())
-					{
-						float dist = wiMath::DistanceEstimated(vis.camera->Eye, object.center);
-						vis.locker.lock();
-						if (dist < vis.closestRefPlane)
-						{
-							vis.closestRefPlane = dist;
-							const TransformComponent& transform = vis.scene->transforms[object.transform_index];
-							XMVECTOR P = transform.GetPositionV();
-							XMVECTOR N = XMVectorSet(0, 1, 0, 0);
-							N = XMVector3TransformNormal(N, XMLoadFloat4x4(&transform.world));
-							XMVECTOR _refPlane = XMPlaneFromPointNormal(P, N);
-							XMStoreFloat4(&vis.reflectionPlane, _refPlane);
+					// Local stream compaction:
+					group_list[group_count++] = args.jobIndex;
 
-							vis.planar_reflection_visible = true;
+					if (vis.flags & Visibility::ALLOW_REQUEST_REFLECTION)
+					{
+						const ObjectComponent& object = vis.scene->objects[args.jobIndex];
+						if (object.IsRequestPlanarReflection())
+						{
+							float dist = wiMath::DistanceEstimated(vis.camera->Eye, object.center);
+							vis.locker.lock();
+							if (dist < vis.closestRefPlane)
+							{
+								vis.closestRefPlane = dist;
+								const TransformComponent& transform = vis.scene->transforms[object.transform_index];
+								XMVECTOR P = transform.GetPositionV();
+								XMVECTOR N = XMVectorSet(0, 1, 0, 0);
+								N = XMVector3TransformNormal(N, XMLoadFloat4x4(&transform.world));
+								XMVECTOR _refPlane = XMPlaneFromPointNormal(P, N);
+								XMStoreFloat4(&vis.reflectionPlane, _refPlane);
+
+								vis.planar_reflection_visible = true;
+							}
+							vis.locker.unlock();
 						}
-						vis.locker.unlock();
 					}
 				}
 			}
@@ -3225,15 +3221,6 @@ void UpdateVisibility(Visibility& vis)
 		vis.visibleDecals.resize(vis.scene->aabb_decals.GetCount());
 		wiJobSystem::Dispatch(ctx, (uint32_t)vis.scene->aabb_decals.GetCount(), groupSize, [&](wiJobArgs args) {
 
-			Entity entity = vis.scene->aabb_decals.GetEntity(args.jobIndex);
-			const LayerComponent* layer = vis.scene->layers.GetComponent(entity);
-			if (layer != nullptr && !(layer->GetLayerMask() & vis.layerMask))
-			{
-				return;
-			}
-
-			const AABB& aabb = vis.scene->aabb_decals[args.jobIndex];
-
 			// Setup stream compaction:
 			uint32_t& group_count = *(uint32_t*)args.sharedmemory;
 			uint32_t* group_list = (uint32_t*)args.sharedmemory + 1;
@@ -3242,10 +3229,17 @@ void UpdateVisibility(Visibility& vis)
 				group_count = 0; // first thread initializes local counter
 			}
 
-			if (vis.frustum.CheckBoxFast(aabb))
+			Entity entity = vis.scene->aabb_decals.GetEntity(args.jobIndex);
+			const LayerComponent* layer = vis.scene->layers.GetComponent(entity);
+			if (layer == nullptr || (layer->GetLayerMask() & vis.layerMask))
 			{
-				// Local stream compaction:
-				group_list[group_count++] = args.jobIndex;
+				const AABB& aabb = vis.scene->aabb_decals[args.jobIndex];
+
+				if (vis.frustum.CheckBoxFast(aabb))
+				{
+					// Local stream compaction:
+					group_list[group_count++] = args.jobIndex;
+				}
 			}
 
 			// Global stream compaction:
@@ -10486,8 +10480,6 @@ void Postprocess_ScreenSpaceShadow(
 
 	static TextureDesc saved_desc;
 	static Texture temp;
-	static Texture temporal[2];
-	static Texture normals;
 
 	const TextureDesc& lineardepth_desc = lineardepth.GetDesc();
 	if (saved_desc.Width != lineardepth_desc.Width || saved_desc.Height != lineardepth_desc.Height)
@@ -10500,19 +10492,8 @@ void Postprocess_ScreenSpaceShadow(
 		desc.Height = (desc.Height + 1) / 2;
 		desc.Format = FORMAT_R32G32B32A32_UINT;
 		device->CreateTexture(&desc, nullptr, &temp);
-		device->SetName(&temp, "rtshadow_temp");
-
-		device->CreateTexture(&desc, nullptr, &temporal[0]);
-		device->SetName(&temporal[0], "rtshadow_temporal[0]");
-		device->CreateTexture(&desc, nullptr, &temporal[1]);
-		device->SetName(&temporal[1], "rtshadow_temporal[1]");
-
-		desc.Format = FORMAT_R11G11B10_FLOAT;
-		device->CreateTexture(&desc, nullptr, &normals);
-		device->SetName(&normals, "rtshadow_normals");
+		device->SetName(&temp, "screenspaceshadow_temp");
 	}
-
-	Postprocess_NormalsFromDepth(depthbuffer, normals, cmd);
 
 	const TextureDesc& desc = temp.GetDesc();
 
@@ -10531,7 +10512,6 @@ void Postprocess_ScreenSpaceShadow(
 	device->BindResource(CS, &depthbuffer, TEXSLOT_DEPTH, cmd);
 	device->BindResource(CS, &lineardepth, TEXSLOT_LINEARDEPTH, cmd);
 
-	device->BindResource(CS, &normals, TEXSLOT_ONDEMAND0, cmd);
 	device->BindResource(CS, &entityTiles_Opaque, TEXSLOT_RENDERPATH_ENTITYTILES, cmd);
 
 	const GPUResource* uavs[] = {
